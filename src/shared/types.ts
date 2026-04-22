@@ -119,6 +119,7 @@ export interface DebitRequest {
   instalmentId: string;
   orderId: string;
   consumerId: string;
+  sequenceNumber: number;   // needed to build DynamoDB SK: INSTALMENT#{sequenceNumber}
   amount: number;
   dueDate: string;
 }
