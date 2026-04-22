@@ -151,7 +151,7 @@ export class ComputeStack extends cdk.Stack {
 
     const approveOrderTask = new tasks.LambdaInvoke(this, 'ApproveOrder', {
       lambdaFunction: this.orderServiceFn,
-      comment: 'Mark order ACTIVE; instalments remain SCHEDULED.',
+      comment: 'Mark order ACTIVE.',
       payload: sfn.TaskInput.fromObject({
         action: 'APPROVE',
         input: {
@@ -160,6 +160,22 @@ export class ComputeStack extends cdk.Stack {
         },
       }),
       resultPath: '$.approvalResult',
+    });
+
+    // Debit instalment 1 immediately after approval — PayJustNow charges the
+    // first instalment at point of purchase, not on a future scheduled date.
+    const debitFirstInstalmentTask = new tasks.LambdaInvoke(this, 'DebitFirstInstalment', {
+      lambdaFunction: this.debitServiceFn,
+      comment: 'Immediately debit instalment #1 at checkout. Instalments 2–3 are scheduled by daily EventBridge.',
+      payload: sfn.TaskInput.fromObject({
+        'instalmentId.$':   '$.firstInstalment.instalmentId',
+        'orderId.$':        '$.orderId',
+        'consumerId.$':     '$.consumerId',
+        'sequenceNumber.$': '$.firstInstalment.sequenceNumber',
+        'amount.$':         '$.firstInstalment.amount',
+        'dueDate.$':        '$.firstInstalment.dueDate',
+      }),
+      resultPath: '$.debitResult',
     });
 
     const declineOrderTask = new tasks.LambdaInvoke(this, 'DeclineOrder', {
@@ -178,7 +194,7 @@ export class ComputeStack extends cdk.Stack {
     const orderApproved = new sfn.Succeed(this, 'OrderApproved');
     const orderDeclined = new sfn.Succeed(this, 'OrderDeclined');
 
-    approveOrderTask.next(orderApproved);
+    approveOrderTask.next(debitFirstInstalmentTask).next(orderApproved);
     declineOrderTask.next(orderDeclined);
 
     const fraudDecision = new sfn.Choice(this, 'FraudDecision')

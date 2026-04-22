@@ -192,11 +192,14 @@ async function createOrder(req: CreateOrderRequest): Promise<CreateOrderResponse
       };
 
       await putInstalment(record);
-      return { sequenceNumber: seq, amount, dueDate };
+      return { instalmentId, sequenceNumber: seq, amount, dueDate };
     }),
   );
 
-  // Start Step Functions approval flow — async, consumer gets 202 immediately
+  // Start Step Functions approval flow — async, consumer gets 202 immediately.
+  // firstInstalment is passed so the DebitFirstInstalment SF state can charge
+  // instalment #1 immediately after fraud approval (PJN charges at checkout).
+  const firstInstalment = instalments[0];
   await sfn.send(new StartExecutionCommand({
     stateMachineArn: STATE_MACHINE_ARN,
     name: orderId,  // idempotent — SF rejects duplicate execution names
@@ -205,6 +208,12 @@ async function createOrder(req: CreateOrderRequest): Promise<CreateOrderResponse
       consumerId: req.consumerId,
       merchantId: req.merchantId,
       amount: req.totalAmount,
+      firstInstalment: {
+        instalmentId:   firstInstalment.instalmentId,
+        sequenceNumber: firstInstalment.sequenceNumber,
+        amount:         firstInstalment.amount,
+        dueDate:        firstInstalment.dueDate,
+      },
     }),
   }));
 

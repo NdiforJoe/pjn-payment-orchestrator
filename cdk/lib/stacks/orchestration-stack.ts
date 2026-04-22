@@ -15,33 +15,21 @@ export class OrchestrationStack extends cdk.Stack {
 
     const { env_name, debitServiceFn } = props;
 
-    // ── EventBridge: Payday Debit Scheduler ───────────────────────────────────
+    // ── EventBridge: Daily Instalment Debit ───────────────────────────────────
     //
-    // South African salary cycle: payday is the 25th of each month.
-    // If the 25th falls on a weekend, employees are paid the preceding Friday.
-    // Two cron rules cover both cases — debit-service handles deduplication.
+    // PayJustNow instalments are scheduled 30 days apart from purchase date,
+    // meaning due dates fall on any day of the month (not fixed to the 25th).
+    // The debit batch runs daily at 08:00 SAST (06:00 UTC) and queries DynamoDB
+    // GSI2 for all SCHEDULED instalments due today.
 
-    // Primary: 25th of every month at 08:00 SAST (06:00 UTC)
-    const rule25th = new events.Rule(this, 'PaydayDebitRule25th', {
-      ruleName: `pjn-payday-debit-25th-${env_name}`,
-      description: 'SA payday debit run — 25th of each month',
-      schedule: events.Schedule.cron({ minute: '0', hour: '6', day: '25', month: '*', year: '*' }),
+    const dailyDebitRule = new events.Rule(this, 'DailyDebitRule', {
+      ruleName: `pjn-daily-debit-${env_name}`,
+      description: 'Daily instalment debit run — queries GSI2 for all due today',
+      schedule: events.Schedule.cron({ minute: '0', hour: '6', month: '*', year: '*' }),
       enabled: env_name === 'prod',
     });
-    rule25th.addTarget(new targets.LambdaFunction(debitServiceFn, {
-      event: events.RuleTargetInput.fromObject({ action: 'RUN_DEBIT_BATCH', trigger: 'PAYDAY_25TH' }),
-      retryAttempts: 2,
-    }));
-
-    // Fallback: Friday before the weekend when 25th falls on Saturday (day=24, Fri)
-    const ruleFri = new events.Rule(this, 'PaydayDebitRuleFri', {
-      ruleName: `pjn-payday-debit-fri-${env_name}`,
-      description: 'SA payday debit run — Friday before weekend 25th',
-      schedule: events.Schedule.cron({ minute: '0', hour: '6', day: '24', month: '*', year: '*' }),
-      enabled: env_name === 'prod',
-    });
-    ruleFri.addTarget(new targets.LambdaFunction(debitServiceFn, {
-      event: events.RuleTargetInput.fromObject({ action: 'RUN_DEBIT_BATCH', trigger: 'PAYDAY_FRI_FALLBACK' }),
+    dailyDebitRule.addTarget(new targets.LambdaFunction(debitServiceFn, {
+      event: events.RuleTargetInput.fromObject({ action: 'RUN_DEBIT_BATCH', trigger: 'DAILY_SCHEDULED' }),
       retryAttempts: 2,
     }));
 
