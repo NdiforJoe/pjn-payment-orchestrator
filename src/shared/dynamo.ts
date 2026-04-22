@@ -57,9 +57,9 @@ export async function getInstalmentsByDueDate(dueDate: string): Promise<Instalme
     TableName: TABLE_NAME,
     IndexName: 'gsi2-due-date-index',
     KeyConditionExpression: 'gsi2pk = :pk',
-    ExpressionAttributeValues: { ':pk': `DUE#${dueDate}` },
     FilterExpression: '#status = :status',
     ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: { ':pk': `DUE#${dueDate}`, ':status': 'SCHEDULED' },
   }));
   return (result.Items ?? []) as InstalmentRecord[];
 }
