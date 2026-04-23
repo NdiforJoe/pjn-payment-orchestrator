@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
@@ -225,9 +226,21 @@ export class ComputeStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(2),
     });
 
-    // Wire SF ARN into order-service — no cross-stack ref needed (same stack)
-    this.stateMachine.grantStartExecution(this.orderServiceFn);
-    this.orderServiceFn.addEnvironment('STATE_MACHINE_ARN', this.stateMachine.stateMachineArn);
+    // Break the circular dependency: state machine references orderServiceFn (for APPROVE/DECLINE
+    // tasks), so we cannot also let the Lambda's IAM policy reference the state machine resource.
+    // Instead, construct the ARN from pseudo-parameters (AWS::Region / AWS::AccountId) — these
+    // resolve at deploy time without creating a CloudFormation resource dependency.
+    const smArn = cdk.Stack.of(this).formatArn({
+      service:      'states',
+      resource:     'stateMachine',
+      resourceName: `pjn-order-orchestrator-${env_name}`,
+      arnFormat:    cdk.ArnFormat.COLON_RESOURCE_NAME,
+    });
+    this.orderServiceFn.addToRolePolicy(new iam.PolicyStatement({
+      actions:   ['states:StartExecution'],
+      resources: [smArn],
+    }));
+    this.orderServiceFn.addEnvironment('STATE_MACHINE_ARN', smArn);
 
     // ── Outputs ───────────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'OrderServiceArn',  { value: this.orderServiceFn.functionArn });
