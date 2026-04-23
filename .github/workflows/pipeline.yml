@@ -23,7 +23,7 @@ jobs:
     name: 'Gate 1 · Secret Detection'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
       - name: Scan for secrets
@@ -47,7 +47,7 @@ jobs:
         run: npm audit --audit-level=high --json > compliance-evidence/npm-audit.json || true
       - name: Fail on critical
         run: npm audit --audit-level=critical
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: npm-audit
           path: compliance-evidence/npm-audit.json
@@ -57,7 +57,7 @@ jobs:
     name: 'Gate 3 · SBOM'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5   # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -73,22 +73,26 @@ jobs:
 
   # ── Gate 4: SAST (PCI DSS Req 6.4) ───────────────────────────────────────
   sast:
-    name: 'Gate 4 · SAST TypeScript'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - run: npm ci
-      - name: TypeScript type check
-        run: npx tsc --noEmit
-      - name: ESLint security scan
-        run: npx eslint src/ --ext .ts --format json > compliance-evidence/eslint-report.json || true
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sast-report
-          path: compliance-evidence/eslint-report.json
+  name: 'Gate 4 · SAST TypeScript'
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+    - run: npm ci
+    - name: Install ESLint plugins
+      run: npm install --no-save eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
+    - name: TypeScript type check
+      run: |
+        npx tsc --noEmit -p src/tsconfig.json
+        npx tsc --noEmit -p cdk/tsconfig.json
+    - name: ESLint security scan
+      run: npx eslint src/ --ext .ts --format json > compliance-evidence/eslint-report.json || true
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      with:
+        name: sast-report
+        path: compliance-evidence/eslint-report.json
 
   # ── Gate 5: IaC Scan — Checkov (PCI DSS Req 2.2) ─────────────────────────
   checkov:
