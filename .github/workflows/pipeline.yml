@@ -106,6 +106,21 @@ jobs:
       - run: npm ci
       - name: Synth CDK to CloudFormation
         run: cd cdk && CDK_DEFAULT_ACCOUNT=${{ env.CDK_DEFAULT_ACCOUNT }} CDK_DEFAULT_REGION=${{ env.CDK_DEFAULT_REGION }} ../node_modules/.bin/cdk synth --require-approval never 2>/dev/null
+      
+      - name: Validate required tags
+        run: |
+          REQUIRED_TAGS=("Environment" "Service" "CostCentre" "ManagedBy")
+          MISSING=0
+          for tag in "${REQUIRED_TAGS[@]}"; do
+            if grep -r "\"$tag\"" cdk/lib/stacks/ > /dev/null 2>&1; then
+              echo "OK: $tag"
+            else
+              echo "MISSING: $tag"
+              MISSING=1
+            fi
+          done
+          [ $MISSING -eq 0 ] || exit 1
+
       - name: Run Checkov on CloudFormation
         uses: bridgecrewio/checkov-action@master
         with:
@@ -200,3 +215,40 @@ jobs:
         run: |
           cd cdk && CDK_DEFAULT_ACCOUNT=${{ env.CDK_DEFAULT_ACCOUNT }} CDK_DEFAULT_REGION=${{ env.CDK_DEFAULT_REGION }} \
           ../node_modules/.bin/cdk deploy --all --require-approval never
+
+  # ── Gate 9: Cost Delta — Infracost (PR only) ─────────────────────────────
+  infracost:
+    name: 'Gate 9 · Cost Delta'
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+      - name: Synth CDK
+        run: |
+          cd cdk && CDK_DEFAULT_ACCOUNT=${{ env.CDK_DEFAULT_ACCOUNT }} \
+          CDK_DEFAULT_REGION=${{ env.CDK_DEFAULT_REGION }} \
+          ../node_modules/.bin/cdk synth --require-approval never 2>/dev/null
+      - name: Install Infracost
+        run: curl -fsSL https://raw.githubusercontent.com/infracost/infracost/master/scripts/install.sh | sh
+      - name: Generate cost estimate
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          infracost breakdown \
+            --path=cdk/cdk.out \
+            --format=json \
+            --out-file=/tmp/infracost.json
+      - name: Post cost estimate on PR
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          infracost comment github \
+            --path=/tmp/infracost.json \
+            --repo=$GITHUB_REPOSITORY \
+            --github-token=${{ github.token }} \
+            --pull-request=${{ github.event.pull_request.number }} \
+            --behavior=update
