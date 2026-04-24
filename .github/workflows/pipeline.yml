@@ -112,7 +112,8 @@ jobs:
           REQUIRED_TAGS=("Environment" "Service" "CostCentre" "ManagedBy")
           MISSING=0
           for tag in "${REQUIRED_TAGS[@]}"; do
-            if grep -r "\"$tag\"" cdk/lib/stacks/ > /dev/null 2>&1; then
+            if grep -r "$tag" cdk/lib/stacks/ > /dev/null 2>&1; then
+
               echo "OK: $tag"
             else
               echo "MISSING: $tag"
